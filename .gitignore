@@ -1,0 +1,63 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux / Unix
+*~
+.nfs*
+.directory
+.Trash-*
+.fuse_hidden*
+
+# Editor and local environment
+.idea/
+*.swp
+*.swo
+*.tmp
+*.temp
+*.log
+.env
+.env.*
+
+# Node / npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# VS Code extension build/test output
+*.vsix
+outputs/
+work/
+.vscode-test/
+.obs-packages/
+
+# Coverage and caches
+coverage/
+.nyc_output/
+.cache/

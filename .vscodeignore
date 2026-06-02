@@ -1,0 +1,6 @@
+.vscode/**
+.git/**
+work/**
+outputs/**
+node_modules/**
+*.vsix

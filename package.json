@@ -1,0 +1,219 @@
+{
+  "name": "vscode-obs-service",
+  "displayName": "OBS Service Workflow",
+  "description": "Create OBS packages with a generated _service file, delete packages, trigger services, watch logs, and monitor status from the current .spec file.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "private": true,
+  "extensionKind": [
+    "workspace"
+  ],
+  "scripts": {
+    "check": "node tools/build.js --check-only",
+    "build": "node tools/build.js",
+    "package:vsix": "node tools/package-vsix.js"
+  },
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:rpm-spec",
+    "workspaceContains:**/*.spec",
+    "onView:obsService.workflow",
+    "onCommand:obsService.configureCurrentSpec",
+    "onCommand:obsService.createPackage",
+    "onCommand:obsService.updateServiceFile",
+    "onCommand:obsService.deletePackage",
+    "onCommand:obsService.rebuildPackage",
+    "onCommand:obsService.triggerServices",
+    "onCommand:obsService.setLogArch",
+    "onCommand:obsService.refreshStatus",
+    "onCommand:obsService.openOutput",
+    "onCommand:obsService.stop"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "OBS Service Workflow",
+      "properties": {
+        "obsService.apiUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Optional OBS API URL passed to osc with -A, for example https://api.opensuse.org."
+        },
+        "obsService.homeProject": {
+          "type": "string",
+          "default": "",
+          "description": "Your OBS home project, for example home:username."
+        },
+        "obsService.defaultProject": {
+          "type": "string",
+          "default": "",
+          "description": "Default OBS project."
+        },
+        "obsService.defaultPackage": {
+          "type": "string",
+          "default": "",
+          "description": "Default OBS package."
+        },
+        "obsService.defaultRepository": {
+          "type": "string",
+          "default": "",
+          "description": "Default OBS build target/repository, for example openSUSE_Tumbleweed. Optional unless opening a specific build log."
+        },
+        "obsService.defaultArch": {
+          "type": "string",
+          "default": "x86_64",
+          "description": "Default OBS architecture."
+        },
+        "obsService.logArch": {
+          "type": "string",
+          "default": "x86_64",
+          "description": "Default architecture used for automatic build log output after creating or rebuilding a package."
+        },
+        "obsService.packageDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "Default local package/source directory."
+        },
+        "obsService.specMappings": {
+          "type": "object",
+          "default": {},
+          "description": "Per-spec OBS mappings keyed by workspace-relative spec path."
+        },
+        "obsService.autoRevealOutput": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reveal the OBS output channel before running osc commands."
+        },
+        "obsService.statusPollingEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh the current spec package build status."
+        },
+        "obsService.statusRefreshIntervalSeconds": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "description": "Interval in seconds for automatic OBS status refresh."
+        },
+        "obsService.statusPollTimeoutSeconds": {
+          "type": "number",
+          "default": 8,
+          "minimum": 5,
+          "description": "Timeout in seconds for one automatic OBS status refresh command."
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "rpm-spec",
+        "aliases": [
+          "RPM Spec",
+          "spec"
+        ],
+        "extensions": [
+          ".spec"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "obsService.configureCurrentSpec",
+        "title": "OBS: Configure Current Spec"
+      },
+      {
+        "command": "obsService.createPackage",
+        "title": "OBS: Create Package"
+      },
+      {
+        "command": "obsService.updateServiceFile",
+        "title": "OBS: Update _service"
+      },
+      {
+        "command": "obsService.deletePackage",
+        "title": "OBS: Delete Package"
+      },
+      {
+        "command": "obsService.rebuildPackage",
+        "title": "OBS: Rebuild Package"
+      },
+      {
+        "command": "obsService.triggerServices",
+        "title": "OBS: Trigger Services"
+      },
+      {
+        "command": "obsService.setLogArch",
+        "title": "OBS: Set Log Target"
+      },
+      {
+        "command": "obsService.refreshStatus",
+        "title": "OBS: Refresh Build Status"
+      },
+      {
+        "command": "obsService.openOutput",
+        "title": "OBS: Open Output"
+      },
+      {
+        "command": "obsService.stop",
+        "title": "OBS: Stop Running Command"
+      }
+    ],
+    "views": {
+      "obsService": [
+        {
+          "id": "obsService.workflow",
+          "name": "OBS Workflow"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "obsService",
+          "title": "OBS",
+          "icon": "media/obs.svg"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "obsService.refreshStatus",
+          "when": "view == obsService.workflow",
+          "group": "navigation"
+        },
+        {
+          "command": "obsService.stop",
+          "when": "view == obsService.workflow",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "obsService.createPackage",
+          "when": "resourceExtname == .spec",
+          "group": "obs@1"
+        },
+        {
+          "command": "obsService.updateServiceFile",
+          "when": "resourceExtname == .spec",
+          "group": "obs@2"
+        },
+        {
+          "command": "obsService.triggerServices",
+          "when": "resourceExtname == .spec",
+          "group": "obs@3"
+        },
+        {
+          "command": "obsService.rebuildPackage",
+          "when": "resourceExtname == .spec",
+          "group": "obs@4"
+        }
+      ]
+    }
+  }
+}
