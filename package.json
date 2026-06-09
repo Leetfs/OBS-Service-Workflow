@@ -26,6 +26,7 @@
     "onCommand:obsService.configureCurrentSpec",
     "onCommand:obsService.createPackage",
     "onCommand:obsService.updateServiceFile",
+    "onCommand:obsService.updateRemoteAssets",
     "onCommand:obsService.deletePackage",
     "onCommand:obsService.rebuildPackage",
     "onCommand:obsService.triggerServices",
@@ -134,6 +135,10 @@
         "title": "OBS: Update _service"
       },
       {
+        "command": "obsService.updateRemoteAssets",
+        "title": "OBS: Update RemoteAsset SHA256"
+      },
+      {
         "command": "obsService.deletePackage",
         "title": "OBS: Delete Package"
       },
@@ -204,14 +209,19 @@
           "group": "obs@2"
         },
         {
-          "command": "obsService.triggerServices",
+          "command": "obsService.updateRemoteAssets",
           "when": "resourceExtname == .spec",
           "group": "obs@3"
         },
         {
-          "command": "obsService.rebuildPackage",
+          "command": "obsService.triggerServices",
           "when": "resourceExtname == .spec",
           "group": "obs@4"
+        },
+        {
+          "command": "obsService.rebuildPackage",
+          "when": "resourceExtname == .spec",
+          "group": "obs@5"
         }
       ]
     }

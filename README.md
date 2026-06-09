@@ -6,6 +6,7 @@
 
 - 创建 OBS 包
 - 生成并提交 `_service`
+- 为 Source URL 刷新 `#!RemoteAsset` sha256
 - 删除 OBS 包
 - 重新构建 OBS 包
 - Trigger source services
@@ -98,6 +99,7 @@ osc commit -m "add _service for <package>" _service
 - `Build Status`：可折叠状态组，自动刷新并显示所有 repository/arch 的构建状态
 - `Create OBS Package`
 - `Update _service`
+- `Update RemoteAsset`：下载 spec 中的 HTTP(S) `Source` URL，计算 sha256，并刷新对应的 `#!RemoteAsset:` 行
 - `Delete Package`：立即执行 `osc rdelete` 删除当前 OBS package
 - `Rebuild Package`
 - `Trigger Services`
@@ -120,6 +122,19 @@ amd64 x86_64 zxing-cpp ...
 ```
 
 则自动使用 `amd64/x86_64` 打开日志。
+
+## RemoteAsset sha256
+
+点击 `Update RemoteAsset` 后，扩展会扫描当前 `.spec` 的 `Source`、`Source0`、`Source1` 等行。URL 中的 `%{version}`、`%{name}`、`%{srcname}` 等已定义宏会先展开，再下载远端文件并计算 sha256。
+
+如果 `Source` 上一行已有 `#!RemoteAsset:`，会替换为新的：
+
+```text
+#!RemoteAsset:  sha256:<sha256>
+Source0:        https://github.com/opencv/opencv/archive/%{version}/opencv-%{version}.tar.gz
+```
+
+如果没有，就会自动插入到对应 `Source` 行上方。多条 `Source0`、`Source1`、`Source2` 会逐条处理。
 
 ## 配置
 

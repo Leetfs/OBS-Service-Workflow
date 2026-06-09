@@ -2,7 +2,10 @@
 
 const vscode = require("vscode");
 const cp = require("child_process");
+const crypto = require("crypto");
 const fs = require("fs");
+const http = require("http");
+const https = require("https");
 const os = require("os");
 const path = require("path");
 
@@ -45,6 +48,7 @@ function activate(context) {
     registerCommand("obsService.configureCurrentSpec", configureCurrentSpec),
     registerCommand("obsService.createPackage", createPackage),
     registerCommand("obsService.updateServiceFile", updateServiceFile),
+    registerCommand("obsService.updateRemoteAssets", updateRemoteAssets),
     registerCommand("obsService.deletePackage", deletePackage),
     registerCommand("obsService.rebuildPackage", rebuildPackage),
     registerCommand("obsService.triggerServices", triggerServices),
@@ -194,6 +198,71 @@ async function updateServiceFile() {
   );
   await refreshPackageStatus(false);
   return true;
+}
+
+async function updateRemoteAssets() {
+  const ctx = await resolveContext({ promptSpec: true });
+  if (!ctx) return;
+
+  const document = await vscode.workspace.openTextDocument(ctx.specUri);
+  const text = document.getText();
+  const sources = collectRemoteAssetSources(text);
+  if (!sources.length) {
+    vscode.window.showWarningMessage("No Source URL lines found in this spec.");
+    return;
+  }
+
+  const unresolved = sources.filter((source) => /^https?:\/\//i.test(source.rawUrl) && hasSpecMacroReference(source.url));
+  if (unresolved.length) {
+    throw new Error(`Cannot expand Source URL macros: ${unresolved.map((source) => source.tag).join(", ")}.`);
+  }
+
+  const remoteSources = sources.filter((source) => /^https?:\/\//i.test(source.url));
+  if (!remoteSources.length) {
+    vscode.window.showWarningMessage("No HTTP(S) Source URLs found in this spec.");
+    return;
+  }
+
+  const skipped = sources.filter((source) => !/^https?:\/\//i.test(source.url));
+  if (getConfig().autoRevealOutput) output.show(true);
+  output.appendLine("");
+  output.appendLine(`[remote-asset] Updating ${remoteSources.length} Source asset${remoteSources.length > 1 ? "s" : ""} for ${path.basename(ctx.specPath)}.`);
+  for (const source of skipped) {
+    output.appendLine(`[remote-asset] Skipping ${source.tag}: ${source.rawUrl}`);
+  }
+
+  setStatus("$(sync~spin) OBS: update RemoteAsset hashes");
+  const updates = await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: "Updating RemoteAsset SHA256",
+    cancellable: false
+  }, async (progress) => {
+    const results = [];
+    for (let index = 0; index < remoteSources.length; index += 1) {
+      const source = remoteSources[index];
+      progress.report({ message: `${index + 1}/${remoteSources.length} ${source.tag}` });
+      output.appendLine(`[remote-asset] ${source.tag}: ${source.url}`);
+      const result = await downloadSha256(source.url);
+      output.appendLine(`[remote-asset] ${source.tag}: sha256:${result.sha256} (${result.bytes} bytes)`);
+      results.push({ source, sha256: result.sha256 });
+    }
+    return results;
+  });
+
+  const updatedText = applyRemoteAssetHashes(text, updates);
+  if (updatedText === text) {
+    vscode.window.showInformationMessage("RemoteAsset SHA256 lines are already up to date.");
+    return;
+  }
+
+  const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(text.length));
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(document.uri, fullRange, updatedText);
+  const applied = await vscode.workspace.applyEdit(edit);
+  if (!applied) throw new Error("Could not update RemoteAsset lines.");
+  await document.save();
+  await vscode.window.showTextDocument(document, { preview: false });
+  vscode.window.showInformationMessage(`Updated RemoteAsset SHA256 for ${updates.length} Source asset${updates.length > 1 ? "s" : ""}.`);
 }
 
 async function deletePackage() {
@@ -1058,6 +1127,64 @@ function runToolCapture(command, args, cwd, timeoutMs) {
   });
 }
 
+function downloadSha256(url, redirectCount = 0) {
+  if (redirectCount > 10) {
+    return Promise.reject(new Error(`Too many redirects while downloading ${url}.`));
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return Promise.reject(new Error(`Invalid Source URL: ${url}`));
+  }
+
+  const transport = parsed.protocol === "http:" ? http : https;
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return Promise.reject(new Error(`Unsupported Source URL protocol: ${parsed.protocol}`));
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = transport.get(parsed, {
+      headers: {
+        "User-Agent": "OBS-Service-Workflow",
+        "Accept": "*/*"
+      }
+    }, (response) => {
+      const statusCode = response.statusCode || 0;
+      const location = response.headers.location;
+      if ([301, 302, 303, 307, 308].includes(statusCode) && location) {
+        response.resume();
+        const nextUrl = new URL(location, parsed).toString();
+        resolve(downloadSha256(nextUrl, redirectCount + 1));
+        return;
+      }
+
+      if (statusCode < 200 || statusCode >= 300) {
+        response.resume();
+        reject(new Error(`Failed to download ${url}: HTTP ${statusCode}.`));
+        return;
+      }
+
+      const hash = crypto.createHash("sha256");
+      let bytes = 0;
+      response.on("data", (chunk) => {
+        bytes += chunk.length;
+        hash.update(chunk);
+      });
+      response.on("end", () => {
+        resolve({ sha256: hash.digest("hex"), bytes });
+      });
+      response.on("error", reject);
+    });
+
+    request.setTimeout(120000, () => {
+      request.destroy(new Error(`Timed out downloading ${url}.`));
+    });
+    request.on("error", reject);
+  });
+}
+
 class ObsTreeProvider {
   constructor() {
     this._onDidChangeTreeData = new vscode.EventEmitter();
@@ -1094,6 +1221,7 @@ class ObsTreeProvider {
     return [
       actionItem("Create OBS Package", "create package from this spec", "obsService.createPackage", "add"),
       actionItem("Update _service", "regenerate and commit only _service", "obsService.updateServiceFile", "cloud-upload"),
+      actionItem("Update RemoteAsset", "download Source URLs and refresh sha256 lines", "obsService.updateRemoteAssets", "key"),
       actionItem("Delete Package", "osc rdelete immediately", "obsService.deletePackage", "trash"),
       actionItem("Rebuild Package", "osc rebuildpac, then show default arch log", "obsService.rebuildPackage", "refresh"),
       actionItem("Trigger Services", "osc service remoterun", "obsService.triggerServices", "cloud"),
@@ -1286,6 +1414,82 @@ function getSpecKey(uri) {
   return folder ? path.relative(folder.uri.fsPath, uri.fsPath) : uri.fsPath;
 }
 
+function collectRemoteAssetSources(text) {
+  const lines = splitTextLines(text);
+  const macros = parseSpecMacros(text);
+  const sources = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].text.match(/^\s*(Source\d*):\s*(\S+)/i);
+    if (!match) continue;
+
+    const tag = match[1];
+    const rawUrl = stripSpecInlineComment(match[2]).trim();
+    if (!rawUrl) continue;
+
+    const previousIndex = index > 0 && isRemoteAssetLine(lines[index - 1].text)
+      ? index - 1
+      : undefined;
+    sources.push({
+      tag,
+      rawUrl,
+      url: expandSpecMacros(rawUrl, macros),
+      lineIndex: index,
+      remoteAssetLineIndex: previousIndex
+    });
+  }
+
+  return sources;
+}
+
+function applyRemoteAssetHashes(text, updates) {
+  const lines = splitTextLines(text);
+  const defaultEol = getDefaultEol(text);
+
+  for (const update of [...updates].sort((left, right) => right.source.lineIndex - left.source.lineIndex)) {
+    const lineText = remoteAssetLineText(lines[update.source.lineIndex].text, update.sha256);
+    if (update.source.remoteAssetLineIndex !== undefined) {
+      lines[update.source.remoteAssetLineIndex].text = lineText;
+      continue;
+    }
+
+    const sourceLine = lines[update.source.lineIndex];
+    lines.splice(update.source.lineIndex, 0, {
+      text: lineText,
+      eol: sourceLine.eol || defaultEol
+    });
+  }
+
+  return lines.map((line) => `${line.text}${line.eol}`).join("");
+}
+
+function remoteAssetLineText(sourceLine, sha256) {
+  const indent = String(sourceLine || "").match(/^\s*/)[0];
+  return `${indent}#!RemoteAsset:  sha256:${sha256}`;
+}
+
+function isRemoteAssetLine(line) {
+  return /^\s*#!RemoteAsset:\s*/i.test(String(line || ""));
+}
+
+function splitTextLines(text) {
+  const lines = [];
+  const value = String(text || "");
+  const pattern = /(.*?)(\r\n|\n|\r|$)/g;
+  let match;
+  while ((match = pattern.exec(value))) {
+    if (match[0] === "" && pattern.lastIndex === value.length) break;
+    lines.push({ text: match[1], eol: match[2] });
+    if (!match[2]) break;
+  }
+  return lines;
+}
+
+function getDefaultEol(text) {
+  const match = String(text || "").match(/\r\n|\n|\r/);
+  return match ? match[0] : "\n";
+}
+
 function getPackageGuess(specPath) {
   try {
     const text = fs.readFileSync(specPath, "utf8");
@@ -1330,6 +1534,15 @@ function parseSpecMacros(text) {
     if (!name || value.includes("%{*}")) continue;
     macros[name] = expandSpecMacros(value, macros);
   }
+
+  for (const tag of ["Name", "Version", "Release", "Epoch"]) {
+    const value = getSpecTagToken(text, tag);
+    if (!value) continue;
+    const expanded = expandSpecMacros(value, macros);
+    macros[tag.toLowerCase()] = expanded;
+    macros[tag] = expanded;
+  }
+
   return macros;
 }
 
