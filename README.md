@@ -85,7 +85,7 @@ osc commit -m "add _service for <package>" _service
 
 创建时不会再询问包名、架构、分支、extract 路径或本地目录：
 
-- 包名来自 spec 的 `Name:` 或 spec 文件名
+- 包名来自 spec 的 `Name:` 或 spec 文件名；`Name: python-%{srcname}` 这类写法会自动展开已定义的 `%global/%define` 宏
 - 分支来自当前 Git 工作分支
 - extract 来自 spec 上级目录相对 Git 根目录的路径
 - OBS 本地工作副本自动放进 `.obs-packages`
@@ -109,7 +109,7 @@ osc commit -m "add _service for <package>" _service
 
 `Build Status` 下的每一条 `repository / arch` 都可以点击；点哪个目标，就把哪个目标的 build log 流式输出到 VSCode 自带 Output 面板。
 
-创建包和重新构建后，扩展会自动在 VSCode 自带 Output 面板里打开默认日志目标的 build log。默认架构是 `x86_64`，可以在左侧面板点击 `Log Target` 从 OBS 的 repositories/arches 列表里修改。
+创建包、重新构建和 Trigger Services 后，扩展会自动在 VSCode 自带 Output 面板里打开默认日志目标的 build log。默认架构是 `x86_64`，可以在左侧面板点击 `Log Target` 从 OBS 的 repositories/arches 列表里修改。
 
 日志通过 OBS `_log?nostream=1&start=<offset>` 增量读取，有新内容就立即写入 Output 面板，不再依赖 `osc buildlog` 的长连接输出节奏。Output 面板的滚动由 VSCode 自身控制，扩展不会再使用单独的自定义 Webview。
 

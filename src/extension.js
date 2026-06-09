@@ -235,6 +235,7 @@ async function triggerServices() {
     title: `trigger services ${ctx.project}/${ctx.packageName}`
   });
   await refreshPackageStatus(false);
+  await openDefaultBuildLog(ctx);
 }
 
 async function openDefaultBuildLog(ctx) {
@@ -1236,7 +1237,7 @@ function buildContext(uri) {
   const mapping = cfg.specMappings[specKey] || {};
   const packageGuess = getPackageGuess(specPath);
   const projectGuess = mapping.project || cfg.defaultProject || cfg.homeProject || "";
-  const packageName = mapping.package || packageGuess || cfg.defaultPackage || "";
+  const packageName = resolveConfiguredPackageName(mapping.package, packageGuess) || cfg.defaultPackage || "";
   const packageDirectory = mapping.packageDirectory
     || cfg.packageDirectory
     || defaultPackageDirectory(projectGuess, packageName, specPath);
@@ -1288,12 +1289,89 @@ function getSpecKey(uri) {
 function getPackageGuess(specPath) {
   try {
     const text = fs.readFileSync(specPath, "utf8");
-    const match = text.match(/^Name:\s*([^\s#]+)/im);
-    if (match) return match[1].trim();
+    const packageName = getSpecPackageName(text);
+    if (packageName) return packageName;
   } catch {
     // Fall back to file name.
   }
   return path.basename(specPath, SPEC_EXT);
+}
+
+function getSpecPackageName(text) {
+  const rawName = getSpecTagToken(text, "Name");
+  if (!rawName) return "";
+
+  const expanded = expandSpecMacros(rawName, parseSpecMacros(text));
+  return cleanPackageName(expanded) || cleanPackageName(rawName);
+}
+
+function getSpecTagToken(text, tag) {
+  const tagPattern = new RegExp(`^\\s*${tag}:\\s*(.+)$`, "i");
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const match = line.match(tagPattern);
+    if (!match) continue;
+    const value = stripSpecInlineComment(match[1]).trim();
+    return (value.split(/\s+/)[0] || "").trim();
+  }
+  return "";
+}
+
+function parseSpecMacros(text) {
+  const macros = {};
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const match = trimmed.match(/^%(?:global|define)\s+([A-Za-z0-9_]+)(?:\([^)]*\))?(?:\s+(.*))?$/);
+    if (!match) continue;
+
+    const name = match[1];
+    const value = stripSpecInlineComment(match[2] || "").trim();
+    if (!name || value.includes("%{*}")) continue;
+    macros[name] = expandSpecMacros(value, macros);
+  }
+  return macros;
+}
+
+function expandSpecMacros(value, macros, depth = 0) {
+  if (depth > 20) return String(value || "");
+  const source = String(value || "");
+
+  const expanded = source.replace(/%\{(!?\??)([A-Za-z0-9_]+)(?::([^{}]*))?\}/g, (match, flag, name, body) => {
+    const hasMacro = Object.prototype.hasOwnProperty.call(macros, name);
+    if (flag === "?") {
+      return hasMacro ? expandSpecMacros(body === undefined ? macros[name] : body, macros, depth + 1) : "";
+    }
+    if (flag === "!?") {
+      return hasMacro ? "" : expandSpecMacros(body || "", macros, depth + 1);
+    }
+    if (!hasMacro) return match;
+    return expandSpecMacros(macros[name], macros, depth + 1);
+  }).replace(/(^|[^%])%([A-Za-z_][A-Za-z0-9_]*)/g, (match, prefix, name) => {
+    if (!Object.prototype.hasOwnProperty.call(macros, name)) return match;
+    return `${prefix}${expandSpecMacros(macros[name], macros, depth + 1)}`;
+  });
+
+  return expanded === source ? expanded : expandSpecMacros(expanded, macros, depth + 1);
+}
+
+function cleanPackageName(value) {
+  const token = stripSpecInlineComment(value).trim().split(/\s+/)[0] || "";
+  return token && !hasSpecMacroReference(token) ? token : "";
+}
+
+function stripSpecInlineComment(value) {
+  return String(value || "").replace(/\s+#.*$/, "");
+}
+
+function resolveConfiguredPackageName(configuredName, packageGuess) {
+  const configured = String(configuredName || "").trim();
+  if (!configured || hasSpecMacroReference(configured)) return packageGuess || "";
+  return configured;
+}
+
+function hasSpecMacroReference(value) {
+  return /%\{[^}]+\}|%[A-Za-z_][A-Za-z0-9_]*/.test(String(value || ""));
 }
 
 function packageLabel(ctx) {
