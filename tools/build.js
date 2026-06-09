@@ -9,7 +9,16 @@ const checkOnly = process.argv.includes("--check-only");
 
 function main() {
   validateManifest();
+  checkJavaScript("src/config.js");
   checkJavaScript("src/extension.js");
+  checkJavaScript("src/git.js");
+  checkJavaScript("src/osc.js");
+  checkJavaScript("src/packages.js");
+  checkJavaScript("src/remote-assets.js");
+  checkJavaScript("src/spec.js");
+  checkJavaScript("src/targets.js");
+  checkJavaScript("src/tree.js");
+  checkJavaScript("src/workspace.js");
   checkJavaScript("tools/package-vsix.js");
   checkJavaScript("tools/build.js");
 

@@ -171,6 +171,23 @@ Source0:        https://github.com/opencv/opencv/archive/%{version}/opencv-%{ver
 }
 ```
 
+## 代码模块
+
+`src` 目录按功能拆分，避免把扩展入口堆成单文件：
+
+- `extension.js`：VSCode 扩展入口，只负责生命周期、命令注册、顶层命令编排、状态栏刷新和 context guard。
+- `config.js`：读取/更新 `obsService.*` 配置，以及保存每个 spec 的 OBS mapping。
+- `workspace.js`：识别当前 `.spec`、选择 spec、构建当前 spec 的运行上下文、计算默认 `.obs-packages` 工作目录。
+- `tree.js`：OBS Activity Bar 侧边栏树视图，包括按钮项、Build Status 子项和点击日志入口。
+- `spec.js`：RPM spec 文本解析，包含 `Name:` 包名推断、`%global/%define` 宏展开、`Source` 与 `#!RemoteAsset` 行的文本更新。
+- `remote-assets.js`：`Update RemoteAsset` 命令实现，负责展开 Source URL、下载远端文件、计算 sha256 并回写 spec。
+- `git.js`：Git remote URL 读取/归一化、当前分支读取、远端分支可用性检查、Git root 查询。
+- `osc.js`：所有 `osc`/命令进程封装，包括普通命令执行、capture 命令、当前运行进程管理、停止命令、build log 流式读取、`osc` 参数展示和错误归一化。
+- `packages.js`：OBS package 相关流程，包括 home project 选择、创建项目/包、初始化 OBS 工作副本、写入并提交 `_service`，以及 `_service`/OBS project XML 生成。
+- `targets.js`：OBS repository/arch 目标选择和推断，包括 `Log Target`、从 project metadata/status 中推断默认日志目标，以及 OBS project metadata 的 build target 解析。
+
+通常改 UI 入口看 `extension.js` 和 `tree.js`；改 spec 解析看 `spec.js`；改下载 hash 看 `remote-assets.js`；改 `osc` 行为或日志流看 `osc.js`；改创建包和 `_service` 流程看 `packages.js`。
+
 ## 安装
 
 生成好的安装包在：
