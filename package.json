@@ -185,18 +185,6 @@
       ]
     },
     "menus": {
-      "view/title": [
-        {
-          "command": "obsService.refreshStatus",
-          "when": "view == obsService.workflow",
-          "group": "navigation"
-        },
-        {
-          "command": "obsService.stop",
-          "when": "view == obsService.workflow",
-          "group": "navigation"
-        }
-      ],
       "editor/context": [
         {
           "command": "obsService.createPackage",
